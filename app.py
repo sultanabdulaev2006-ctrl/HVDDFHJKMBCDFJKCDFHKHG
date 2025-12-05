@@ -47,7 +47,6 @@ def login(email, password):
 # SET RANK FUNCTION (РЕАЛЬНО)
 # -------------------------------
 def set_rank(token):
-    # 🔹 Убираем заглушку, реально отправляем рейтинг
     rating_data = {k: 100000 for k in [
         "cars", "car_fix", "car_collided", "car_exchange", "car_trade", "car_wash",
         "slicer_cut", "drift_max", "drift", "cargo", "delivery", "taxi", "levels", "gifts",
@@ -98,23 +97,44 @@ def handle_message(message):
         state["email"] = text
         state["step"] = "await_password"
         bot.reply_to(message, "🔒 Отлично! Теперь введи пароль от аккаунта:")
+
     elif state["step"] == "await_password":
         email = state["email"]
         password = text
-        bot.reply_to(message, "🔐 Выполняю логин...")
+        chat_id = message.chat.id
+
+        # Сохраняем сообщения для последующего удаления
+        messages_to_delete = [message.message_id]
+
+        msg_login = bot.reply_to(message, "🔐 Выполняю логин...")
+        messages_to_delete.append(msg_login.message_id)
+
         token = login(email, password)
         if not token:
-            bot.reply_to(message, "❌ Ошибка входа. Попробуй другой аккаунт.")
+            msg_error = bot.reply_to(message, "❌ Ошибка входа. Попробуй другой аккаунт.")
+            messages_to_delete.append(msg_error.message_id)
         else:
-            bot.reply_to(message, "👑 Применяю Rank King...")
+            msg_rank = bot.reply_to(message, "👑 Применяю Rank King...")
+            messages_to_delete.append(msg_rank.message_id)
+
             success = set_rank(token)
             if success:
-                bot.reply_to(message, f"✅ Rank King реально применён на аккаунт {email}!")
+                msg_done = bot.reply_to(message, f"✅ Rank King реально применён на аккаунт {email}!")
             else:
-                bot.reply_to(message, "❌ Ошибка при применении ранга.")
+                msg_done = bot.reply_to(message, "❌ Ошибка при применении ранга.")
+            messages_to_delete.append(msg_done.message_id)
 
-        # Сбрасываем состояние, показываем только приветствие для нового аккаунта
+        # 🔄 Удаляем все сообщения кроме приветствия
+        for msg_id in messages_to_delete:
+            try:
+                bot.delete_message(chat_id, msg_id)
+            except:
+                pass  # Если не удалось удалить, пропускаем
+
+        # Сбрасываем состояние пользователя
         user_states.pop(user_id)
+
+        # Отправляем только приветствие для следующего аккаунта
         send_welcome(user_id)
 
 # -------------------------------
