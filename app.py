@@ -52,10 +52,13 @@ def login(email, password):
         print(f"❌ Network error: {e}")
         return None
 
+# -------------------------------
+# 🔹 SET RANK (РЕАЛЬНЫЙ)
+# -------------------------------
+def set_rank(token):
+    """Apply REAL KING RANK."""
+    print("👑 Applying REAL Rank King...")
 
-             def set_rank(token):
-    """Set KING RANK using max rating data."""
-    print("👑 Applying rank...")
     rating_data = {k: 100000 for k in [
         "cars", "car_fix", "car_collided", "car_exchange", "car_trade", "car_wash",
         "slicer_cut", "drift_max", "drift", "cargo", "delivery", "taxi", "levels", "gifts",
@@ -66,6 +69,7 @@ def login(email, password):
     rating_data["race_win"] = 3000
 
     payload = {"data": json.dumps({"RatingData": rating_data})}
+
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
@@ -74,12 +78,15 @@ def login(email, password):
 
     try:
         response = requests.post(RANK_URL, headers=headers, json=payload)
+
         if response.status_code == 200:
-            print("✅ Rank request sent.")
+            print("✅ REAL Rank King applied!")
             return True
         else:
             print(f"❌ Failed. HTTP Status: {response.status_code}")
+            print(response.text)
             return False
+
     except requests.exceptions.RequestException as e:
         print(f"❌ Network error: {e}")
         return False
@@ -114,9 +121,12 @@ def handle_message(message):
             bot.reply_to(message, "❌ Ошибка входа. Попробуй ещё раз /start")
             user_states.pop(user_id)
             return
-        bot.reply_to(message, "👑 Применяю ранг (заглушка)...")
-        set_rank(token)
-        bot.reply_to(message, "✅ Готово! (симуляция выполнена)")
+        bot.reply_to(message, "👑 Применяю реальный ранг Кинг...")
+        result = set_rank(token)
+        if result:
+            bot.reply_to(message, "✅ Готово! Rank King применен!")
+        else:
+            bot.reply_to(message, "❌ Ошибка при применении ранга.")
         user_states.pop(user_id)
     else:
         bot.reply_to(message, "❌ Неизвестная команда. Введи /start для начала.")
