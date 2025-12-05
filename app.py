@@ -9,12 +9,34 @@ import telebot
 # TELEGRAM CONFIG
 # -------------------------------
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
+ADMIN_ID = os.environ.get("ADMIN_ID")
+
 if not BOT_TOKEN:
     raise ValueError("❌ BOT_TOKEN не задан! Проверьте переменные окружения на Render.")
+if not ADMIN_ID:
+    raise ValueError("❌ ADMIN_ID не задан! Проверьте переменные окружения на Render.")
 
+ADMIN_ID = int(ADMIN_ID)
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# --- Game Service Configuration ---
+# -------------------------------
+# ACCESS CONTROL
+# -------------------------------
+ALLOWED_FILE = "allowed_users.json"
+
+if os.path.exists(ALLOWED_FILE):
+    with open(ALLOWED_FILE, "r") as f:
+        ALLOWED_USERS = set(json.load(f))
+else:
+    ALLOWED_USERS = {ADMIN_ID}
+
+def save_allowed():
+    with open(ALLOWED_FILE, "w") as f:
+        json.dump(list(ALLOWED_USERS), f)
+
+# -------------------------------
+# Game Service Configuration
+# -------------------------------
 FIREBASE_API_KEY = 'AIzaSyBW1ZbMiUeDZHYUO2bY8Bfnf5rRgrQGPTM'
 FIREBASE_LOGIN_URL = f"https://www.googleapis.com/identitytoolkit/v3/relyingparty/verifyPassword?key={FIREBASE_API_KEY}"
 RANK_URL = "https://us-central1-cp-multiplayer.cloudfunctions.net/SetUserRating4"
@@ -44,7 +66,7 @@ def login(email, password):
         return None
 
 # -------------------------------
-# SET RANK FUNCTION (РЕАЛЬНО)
+# SET RANK FUNCTION
 # -------------------------------
 def set_rank(token):
     rating_data = {k: 100000 for k in [
@@ -67,12 +89,61 @@ def set_rank(token):
     return response.status_code == 200
 
 # -------------------------------
+# ADMIN COMMANDS
+# -------------------------------
+@bot.message_handler(commands=['add'])
+def add_user(message):
+    if message.from_user.id != ADMIN_ID:
+        return bot.reply_to(message, "⛔ У тебя нет прав администратора.")
+    try:
+        user_id = int(message.text.split()[1])
+    except:
+        return bot.reply_to(message, "❗ Используй: /add 123456789")
+    ALLOWED_USERS.add(user_id)
+    save_allowed()
+    bot.reply_to(message, f"✅ Пользователь {user_id} добавлен.")
+
+@bot.message_handler(commands=['remove'])
+def remove_user(message):
+    if message.from_user.id != ADMIN_ID:
+        return bot.reply_to(message, "⛔ У тебя нет прав администратора.")
+    try:
+        user_id = int(message.text.split()[1])
+    except:
+        return bot.reply_to(message, "❗ Используй: /remove 123456789")
+    if user_id == ADMIN_ID:
+        return bot.reply_to(message, "❗ Нельзя удалить администратора.")
+    if user_id in ALLOWED_USERS:
+        ALLOWED_USERS.remove(user_id)
+        save_allowed()
+        bot.reply_to(message, f"🗑 Пользователь {user_id} удалён.")
+    else:
+        bot.reply_to(message, f"⚠ ID нет в списке.")
+
+@bot.message_handler(commands=['list'])
+def list_users(message):
+    if message.from_user.id != ADMIN_ID:
+        return bot.reply_to(message, "⛔ У тебя нет прав администратора.")
+    result = "📋 Разрешённые пользователи:\n\n"
+    for uid in ALLOWED_USERS:
+        try:
+            chat = bot.get_chat(uid)
+            username = f"@{chat.username}" if chat.username else "(нет username)"
+            first_name = chat.first_name if chat.first_name else ""
+            last_name = chat.last_name if chat.last_name else ""
+        except:
+            username = "(не удалось получить username)"
+            first_name = ""
+            last_name = ""
+        result += f"{uid} — {username} {first_name} {last_name}\n"
+    bot.reply_to(message, result)
+
+# -------------------------------
 # TELEGRAM BOT HANDLERS
 # -------------------------------
-user_states = {}  # Хранит текущее состояние каждого пользователя
+user_states = {}
 
 def send_welcome(user_id):
-    """Отправляем приветствие для нового или повторного аккаунта"""
     user_states[user_id] = {"step": "await_email"}
     bot.send_message(user_id, "📧 Введи gmail")
 
@@ -85,6 +156,11 @@ def handle_message(message):
     user_id = message.from_user.id
     text = message.text.strip()
     chat_id = message.chat.id
+
+    # ---- ACCESS CHECK ----
+    if user_id not in ALLOWED_USERS:
+        bot.send_message(user_id, "⛔ У тебя нет разрешения на использование бота.")
+        return
 
     if user_id not in user_states:
         send_welcome(user_id)
@@ -109,7 +185,7 @@ def handle_message(message):
 
         token = login(email, password)
         if not token:
-            msg_error = bot.reply_to(message, "❌ Ошибка входа. Попробуй другой аккаунт.")
+            msg_error = bot.reply_to(message, "❌ Ошибка входа.")
             messages_to_delete.append(msg_error.message_id)
         else:
             msg_rank = bot.reply_to(message, "👑 Rang устанавливается...")
@@ -117,15 +193,13 @@ def handle_message(message):
 
             success = set_rank(token)
             if success:
-                msg_done = bot.reply_to(message, f"✅ RANG установлен!")
+                msg_done = bot.reply_to(message, "✅ RANG установлен!")
             else:
                 msg_done = bot.reply_to(message, "❌ Ошибка при установке.")
             messages_to_delete.append(msg_done.message_id)
 
-        # Сбрасываем состояние пользователя
         user_states.pop(user_id)
 
-        # Через 2 секунды удаляем все сообщения и оставляем только приветствие
         def cleanup():
             for msg_id in messages_to_delete:
                 try:
@@ -134,7 +208,7 @@ def handle_message(message):
                     pass
             send_welcome(user_id)
 
-        threading.Timer(2.0, cleanup).start()  # удаляем через 2 секунды
+        threading.Timer(2.0, cleanup).start()
 
 # -------------------------------
 # THREAD FOR TELEGRAM BOT (LONG POLLING)
@@ -143,16 +217,14 @@ def bot_thread():
     bot.infinity_polling()
 
 # -------------------------------
-# RENDER APP START (ВАЖНО!)
+# RENDER APP START
 # -------------------------------
 if __name__ == "__main__":
     print("🚀 Telegram bot starting...")
 
-    # Запускаем бота в отдельном потоке
     t = threading.Thread(target=bot_thread)
     t.start()
 
-    # Минимальный Flask-сервер, чтобы Render не останавливал приложение
     app = Flask(__name__)
 
     @app.route("/")
