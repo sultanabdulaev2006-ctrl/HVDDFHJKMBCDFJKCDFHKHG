@@ -52,12 +52,10 @@ def login(email, password):
         print(f"❌ Network error: {e}")
         return None
 
-# -------------------------------
-# 🔹 SET RANK (ЗАГЛУШКА)
-# -------------------------------
-def set_rank(token):
-    """Set KING RANK using max rating data (stub)."""
-    print("👑 Applying rank (stub)...")
+
+             def set_rank(token):
+    """Set KING RANK using max rating data."""
+    print("👑 Applying rank...")
     rating_data = {k: 100000 for k in [
         "cars", "car_fix", "car_collided", "car_exchange", "car_trade", "car_wash",
         "slicer_cut", "drift_max", "drift", "cargo", "delivery", "taxi", "levels", "gifts",
@@ -68,12 +66,23 @@ def set_rank(token):
     rating_data["race_win"] = 3000
 
     payload = {"data": json.dumps({"RatingData": rating_data})}
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "User-Agent": "okhttp/3.12.13"
+    }
 
-    # 🔒 SAFE MODE — реальный запрос НЕ отправляется
-    print("\n🚫 Stub mode enabled — request NOT sent.")
-    print(json.dumps(payload, indent=4))
-    print("✅ Rank request simulated safely.\n")
-    return True
+    try:
+        response = requests.post(RANK_URL, headers=headers, json=payload)
+        if response.status_code == 200:
+            print("✅ Rank request sent.")
+            return True
+        else:
+            print(f"❌ Failed. HTTP Status: {response.status_code}")
+            return False
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Network error: {e}")
+        return False
 
 # -------------------------------
 # 🤖 TELEGRAM BOT HANDLERS
