@@ -1,5 +1,4 @@
 import threading
-import time
 import os
 import requests
 import json
@@ -7,10 +6,9 @@ from flask import Flask
 import telebot
 
 # -------------------------------
-# 🔧 TELEGRAM CONFIG
+# TELEGRAM CONFIG
 # -------------------------------
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-
 if not BOT_TOKEN:
     raise ValueError("❌ BOT_TOKEN не задан! Проверьте переменные окружения на Render.")
 
@@ -22,11 +20,9 @@ FIREBASE_LOGIN_URL = f"https://www.googleapis.com/identitytoolkit/v3/relyingpart
 RANK_URL = "https://us-central1-cp-multiplayer.cloudfunctions.net/SetUserRating4"
 
 # -------------------------------
-# 🔹 LOGIN (РЕАЛЬНЫЙ)
+# LOGIN FUNCTION
 # -------------------------------
 def login(email, password):
-    """Login to CPM using Firebase API."""
-    print(f"\n🔐 Logging in: {email}")
     payload = {
         "clientType": "CLIENT_TYPE_ANDROID",
         "email": email,
@@ -37,28 +33,21 @@ def login(email, password):
         "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 12)",
         "Content-Type": "application/json"
     }
-
     try:
         response = requests.post(FIREBASE_LOGIN_URL, headers=headers, json=payload)
         data = response.json()
         if response.status_code == 200 and "idToken" in data:
-            print("✅ Login successful!")
             return data["idToken"]
         else:
-            error_message = data.get("error", {}).get("message", "Unknown error during login.")
-            print(f"❌ Login failed: {error_message}")
             return None
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Network error: {e}")
+    except:
         return None
 
 # -------------------------------
-# 🔹 SET RANK (РЕАЛЬНЫЙ)
+# SET RANK FUNCTION (РЕАЛЬНО)
 # -------------------------------
 def set_rank(token):
-    """Apply REAL KING RANK."""
-    print("👑 Applying REAL Rank King...")
-
+    # 🔹 Убираем заглушку, реально отправляем рейтинг
     rating_data = {k: 100000 for k in [
         "cars", "car_fix", "car_collided", "car_exchange", "car_trade", "car_wash",
         "slicer_cut", "drift_max", "drift", "cargo", "delivery", "taxi", "levels", "gifts",
@@ -69,76 +58,73 @@ def set_rank(token):
     rating_data["race_win"] = 3000
 
     payload = {"data": json.dumps({"RatingData": rating_data})}
-
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
         "User-Agent": "okhttp/3.12.13"
     }
 
-    try:
-        response = requests.post(RANK_URL, headers=headers, json=payload)
-
-        if response.status_code == 200:
-            print("✅ REAL Rank King applied!")
-            return True
-        else:
-            print(f"❌ Failed. HTTP Status: {response.status_code}")
-            print(response.text)
-            return False
-
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Network error: {e}")
-        return False
+    response = requests.post(RANK_URL, headers=headers, json=payload)
+    return response.status_code == 200
 
 # -------------------------------
-# 🤖 TELEGRAM BOT HANDLERS
+# TELEGRAM BOT HANDLERS
 # -------------------------------
-user_states = {}  # Хранит состояние диалога: "await_email" или "await_password"
+user_states = {}  # Хранит текущее состояние каждого пользователя
+
+def send_welcome(user_id, message=None):
+    user_states[user_id] = {"step": "await_email"}
+    if message:
+        bot.reply_to(message, "👋 Привет! Чтобы выполнить Rank King, сначала введи свой email (Gmail):")
+    else:
+        bot.send_message(user_id, "👋 Привет! Чтобы выполнить Rank King, сначала введи свой email (Gmail):")
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    user_id = message.from_user.id
-    user_states[user_id] = "await_email"
-    bot.reply_to(message,
-                 "👋 Привет!\nЧтобы выполнить Rank King, сначала введи свой email (Gmail):")
-
+    send_welcome(message.from_user.id, message)
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
     user_id = message.from_user.id
-    state = user_states.get(user_id, None)
+    text = message.text.strip()
 
-    if state == "await_email":
-        user_states[user_id] = {"email": message.text, "step": "await_password"}
+    if user_id not in user_states:
+        send_welcome(user_id, message)
+        return
+
+    state = user_states[user_id]
+
+    if state["step"] == "await_email":
+        state["email"] = text
+        state["step"] = "await_password"
         bot.reply_to(message, "🔒 Отлично! Теперь введи пароль от аккаунта:")
-    elif state and isinstance(state, dict) and state.get("step") == "await_password":
+    elif state["step"] == "await_password":
         email = state["email"]
-        password = message.text
+        password = text
         bot.reply_to(message, "🔐 Выполняю логин...")
         token = login(email, password)
         if not token:
-            bot.reply_to(message, "❌ Ошибка входа. Попробуй ещё раз /start")
-            user_states.pop(user_id)
-            return
-        bot.reply_to(message, "👑 Применяю реальный ранг Кинг...")
-        result = set_rank(token)
-        if result:
-            bot.reply_to(message, "✅ Готово! Rank King применен!")
+            bot.reply_to(message, "❌ Ошибка входа. Попробуй другой аккаунт.")
         else:
-            bot.reply_to(message, "❌ Ошибка при применении ранга.")
+            bot.reply_to(message, "👑 Применяю Rank King...")
+            success = set_rank(token)
+            if success:
+                bot.reply_to(message, f"✅ Rank King реально применён на аккаунт {email}!")
+            else:
+                bot.reply_to(message, "❌ Ошибка при применении ранга.")
+
+        # Сбрасываем состояние, показываем только приветствие для нового аккаунта
         user_states.pop(user_id)
-    else:
-        bot.reply_to(message, "❌ Неизвестная команда. Введи /start для начала.")
+        send_welcome(user_id)
 
 # -------------------------------
-# ▶️ THREAD FOR TELEGRAM BOT (LONG POLLING)
+# THREAD FOR TELEGRAM BOT (LONG POLLING)
 # -------------------------------
 def bot_thread():
     bot.infinity_polling()
 
 # -------------------------------
-# 🌐 FLASK APP TO KEEP PROCESS ALIVE
+# FLASK APP TO KEEP PROCESS ALIVE
 # -------------------------------
 app = Flask(__name__)
 
@@ -147,9 +133,6 @@ def home():
     return "Bot is running!"
 
 if __name__ == "__main__":
-    # Start bot in a separate thread
     t = threading.Thread(target=bot_thread)
     t.start()
-
-    # Start Flask server (Render Web Service keeps process alive)
     app.run(host="0.0.0.0", port=10000)
