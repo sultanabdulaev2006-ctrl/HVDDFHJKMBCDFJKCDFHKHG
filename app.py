@@ -142,4 +142,21 @@ def handle_message(message):
 def bot_thread():
     bot.infinity_polling()
 
-# ------------------------
+# -------------------------------
+# RENDER APP START (ВАЖНО!)
+# -------------------------------
+if __name__ == "__main__":
+    print("🚀 Telegram bot starting...")
+
+    # Запускаем бота в отдельном потоке
+    t = threading.Thread(target=bot_thread)
+    t.start()
+
+    # Минимальный Flask-сервер, чтобы Render не останавливал приложение
+    app = Flask(__name__)
+
+    @app.route("/")
+    def home():
+        return "Bot is running"
+
+    app.run(host="0.0.0.0", port=10000)
