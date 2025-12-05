@@ -1,5 +1,6 @@
 import threading
 import time
+import os
 import requests
 import json
 from flask import Flask
@@ -8,7 +9,13 @@ import telebot
 # -------------------------------
 # 🔧 TELEGRAM CONFIG
 # -------------------------------
-BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN_HERE"  # Вставь сюда токен своего бота
+# Получаем токен бота из переменной окружения Render
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+
+# Проверка токена
+if not BOT_TOKEN:
+    raise ValueError("❌ BOT_TOKEN не задан! Проверьте переменные окружения на Render.")
+
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # --- Game Service Configuration ---
@@ -16,15 +23,16 @@ FIREBASE_API_KEY = 'AIzaSyBW1ZbMiUeDZHYUO2bY8Bfnf5rRgrQGPTM'
 FIREBASE_LOGIN_URL = f"https://www.googleapis.com/identitytoolkit/v3/relyingparty/verifyPassword?key={FIREBASE_API_KEY}"
 RANK_URL = "https://us-central1-cp-multiplayer.cloudfunctions.net/SetUserRating4"
 
-
+# -------------------------------
+# 🔹 SAFE LOGIN & RANK FUNCTIONS
+# -------------------------------
 def login(email, password):
-    """Login imitation (stub mode still prepares token)."""
+    """Login imitation (stub mode)."""
     print(f"🔐 Logging in: {email}")
     time.sleep(0.5)
     fake_token = "FAKE_TOKEN_12345"
     print("✅ Login successful! (stub mode)")
     return fake_token
-
 
 def set_rank(token):
     """Rank King function with safe stub."""
@@ -48,11 +56,9 @@ def set_rank(token):
     print("✅ Rank request simulated safely.\n")
     return True
 
-
 # -------------------------------
 # 🤖 TELEGRAM BOT HANDLERS
 # -------------------------------
-
 @bot.message_handler(commands=['start'])
 def start(message):
     bot.reply_to(message,
@@ -60,7 +66,6 @@ def start(message):
                  "`/rank email пароль`\n\n"
                  "Скрипт выполнит вход и симулирует применение ранга.",
                  parse_mode="Markdown")
-
 
 @bot.message_handler(commands=['rank'])
 def rank_command(message):
@@ -93,24 +98,20 @@ def rank_command(message):
     except Exception as e:
         bot.reply_to(message, f"⚠️ Ошибка: {e}")
 
-
 # -------------------------------
 # ▶️ THREAD FOR TELEGRAM BOT (LONG POLLING)
 # -------------------------------
 def bot_thread():
     bot.infinity_polling()
 
-
 # -------------------------------
 # 🌐 FLASK APP TO KEEP PROCESS ALIVE
 # -------------------------------
 app = Flask(__name__)
 
-
 @app.route("/")
 def home():
     return "Bot is running!"
-
 
 if __name__ == "__main__":
     # Start bot in a separate thread
