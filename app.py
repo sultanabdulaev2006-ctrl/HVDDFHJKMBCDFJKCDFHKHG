@@ -71,24 +71,23 @@ def set_rank(token):
 # -------------------------------
 user_states = {}  # Хранит текущее состояние каждого пользователя
 
-def send_welcome(user_id, message=None):
+def send_welcome(user_id):
+    """Отправляем приветствие для нового или повторного аккаунта"""
     user_states[user_id] = {"step": "await_email"}
-    if message:
-        bot.reply_to(message, "👋 Привет! Чтобы выполнить Rank King, сначала введи свой email (Gmail):")
-    else:
-        bot.send_message(user_id, "👋 Привет! Чтобы выполнить Rank King, сначала введи свой email (Gmail):")
+    bot.send_message(user_id, "👋 Привет! Чтобы выполнить Rank King, сначала введи свой email (Gmail):")
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    send_welcome(message.from_user.id, message)
+    send_welcome(message.from_user.id)
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
     user_id = message.from_user.id
     text = message.text.strip()
+    chat_id = message.chat.id
 
     if user_id not in user_states:
-        send_welcome(user_id, message)
+        send_welcome(user_id)
         return
 
     state = user_states[user_id]
@@ -96,15 +95,14 @@ def handle_message(message):
     if state["step"] == "await_email":
         state["email"] = text
         state["step"] = "await_password"
-        bot.reply_to(message, "🔒 Отлично! Теперь введи пароль от аккаунта:")
+        msg = bot.reply_to(message, "🔒 Отлично! Теперь введи пароль от аккаунта:")
+        state["last_msg_ids"] = [message.message_id, msg.message_id]
 
     elif state["step"] == "await_password":
         email = state["email"]
         password = text
-        chat_id = message.chat.id
-
-        # Сохраняем сообщения для последующего удаления
-        messages_to_delete = [message.message_id]
+        messages_to_delete = state.get("last_msg_ids", [])
+        messages_to_delete.append(message.message_id)
 
         msg_login = bot.reply_to(message, "🔐 Выполняю логин...")
         messages_to_delete.append(msg_login.message_id)
@@ -124,18 +122,20 @@ def handle_message(message):
                 msg_done = bot.reply_to(message, "❌ Ошибка при применении ранга.")
             messages_to_delete.append(msg_done.message_id)
 
-        # 🔄 Удаляем все сообщения кроме приветствия
-        for msg_id in messages_to_delete:
-            try:
-                bot.delete_message(chat_id, msg_id)
-            except:
-                pass  # Если не удалось удалить, пропускаем
-
         # Сбрасываем состояние пользователя
         user_states.pop(user_id)
 
-        # Отправляем только приветствие для следующего аккаунта
-        send_welcome(user_id)
+        # Через 5 секунд удаляем все сообщения кроме приветствия
+        def cleanup():
+            for msg_id in messages_to_delete:
+                try:
+                    bot.delete_message(chat_id, msg_id)
+                except:
+                    pass
+            # Отправляем приветствие заново
+            send_welcome(user_id)
+
+        threading.Timer(5.0, cleanup).start()  # удаляем через 5 секунд
 
 # -------------------------------
 # THREAD FOR TELEGRAM BOT (LONG POLLING)
