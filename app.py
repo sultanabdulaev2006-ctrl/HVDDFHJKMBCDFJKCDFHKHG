@@ -125,17 +125,16 @@ def handle_message(message):
         # Сбрасываем состояние пользователя
         user_states.pop(user_id)
 
-        # Через 5 секунд удаляем все сообщения кроме приветствия
+        # Через 2 секунды удаляем все сообщения и оставляем только приветствие
         def cleanup():
             for msg_id in messages_to_delete:
                 try:
                     bot.delete_message(chat_id, msg_id)
                 except:
                     pass
-            # Отправляем приветствие заново
             send_welcome(user_id)
 
-        threading.Timer(5.0, cleanup).start()  # удаляем через 5 секунд
+        threading.Timer(2.0, cleanup).start()  # удаляем через 2 секунды
 
 # -------------------------------
 # THREAD FOR TELEGRAM BOT (LONG POLLING)
