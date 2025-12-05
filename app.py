@@ -149,7 +149,22 @@ def send_welcome(user_id):
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    send_welcome(message.from_user.id)
+    user_id = message.from_user.id
+
+    # Определяем баланс
+    balance = "Unlimited" if user_id in ALLOWED_USERS else "0"
+
+    # Отправляем Telegram ID и баланс
+    bot.send_message(
+        user_id,
+        f"Telegram ID: {user_id}\n💰Balance: {balance}"
+    )
+
+    # Если пользователь разрешён, продолжаем workflow логина
+    if user_id in ALLOWED_USERS:
+        send_welcome(user_id)
+    else:
+        bot.send_message(user_id, "⛔ У тебя нет разрешения на использование бота.")
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
@@ -231,4 +246,5 @@ if __name__ == "__main__":
     def home():
         return "Bot is running"
 
-    app.run(host="0.0.0.0", port=10000)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
