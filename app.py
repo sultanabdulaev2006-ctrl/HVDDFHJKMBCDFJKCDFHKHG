@@ -1,250 +1,152 @@
-import threading
 import os
-import requests
-import json
-from flask import Flask
-import telebot
+import asyncio
+from aiogram import Bot, Dispatcher, types
+from aiogram.filters import Command
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from datetime import datetime
 
-# -------------------------------
-# TELEGRAM CONFIG
-# -------------------------------
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-ADMIN_ID = os.environ.get("ADMIN_ID")
+# ----------------------------
+# НАСТРОЙКИ
+# ----------------------------
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_ID"))
+WAIT_GROUP_LINK = "https://t.me/+S8yADtnHIRhiOGNi"  # Ссылка на группу ожидания
 
-if not BOT_TOKEN:
-    raise ValueError("❌ BOT_TOKEN не задан! Проверьте переменные окружения на Render.")
-if not ADMIN_ID:
-    raise ValueError("❌ ADMIN_ID не задан! Проверьте переменные окружения на Render.")
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher(storage=MemoryStorage())
 
-ADMIN_ID = int(ADMIN_ID)
-bot = telebot.TeleBot(BOT_TOKEN)
+# ----------------------------
+# FSM
+# ----------------------------
+class Form(StatesGroup):
+    age = State()
+    nickname = State()
+    game_id = State()
+    screenshot = State()
 
-# -------------------------------
-# ACCESS CONTROL
-# -------------------------------
-ALLOWED_FILE = "allowed_users.json"
-
-if os.path.exists(ALLOWED_FILE):
-    with open(ALLOWED_FILE, "r") as f:
-        ALLOWED_USERS = set(json.load(f))
-else:
-    ALLOWED_USERS = {ADMIN_ID}
-
-def save_allowed():
-    with open(ALLOWED_FILE, "w") as f:
-        json.dump(list(ALLOWED_USERS), f)
-
-# -------------------------------
-# Game Service Configuration
-# -------------------------------
-FIREBASE_API_KEY = 'AIzaSyBW1ZbMiUeDZHYUO2bY8Bfnf5rRgrQGPTM'
-FIREBASE_LOGIN_URL = f"https://www.googleapis.com/identitytoolkit/v3/relyingparty/verifyPassword?key={FIREBASE_API_KEY}"
-RANK_URL = "https://us-central1-cp-multiplayer.cloudfunctions.net/SetUserRating4"
-
-# -------------------------------
-# LOGIN FUNCTION
-# -------------------------------
-def login(email, password):
-    payload = {
-        "clientType": "CLIENT_TYPE_ANDROID",
-        "email": email,
-        "password": password,
-        "returnSecureToken": True
-    }
-    headers = {
-        "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 12)",
-        "Content-Type": "application/json"
-    }
-    try:
-        response = requests.post(FIREBASE_LOGIN_URL, headers=headers, json=payload)
-        data = response.json()
-        if response.status_code == 200 and "idToken" in data:
-            return data["idToken"]
-        else:
-            return None
-    except:
-        return None
-
-# -------------------------------
-# SET RANK FUNCTION
-# -------------------------------
-def set_rank(token):
-    rating_data = {k: 100000 for k in [
-        "cars", "car_fix", "car_collided", "car_exchange", "car_trade", "car_wash",
-        "slicer_cut", "drift_max", "drift", "cargo", "delivery", "taxi", "levels", "gifts",
-        "fuel", "offroad", "speed_banner", "reactions", "police", "run", "real_estate",
-        "t_distance", "treasure", "block_post", "push_ups", "burnt_tire", "passanger_distance"
-    ]}
-    rating_data["time"] = 10000000000
-    rating_data["race_win"] = 3000
-
-    payload = {"data": json.dumps({"RatingData": rating_data})}
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-        "User-Agent": "okhttp/3.12.13"
-    }
-
-    response = requests.post(RANK_URL, headers=headers, json=payload)
-    return response.status_code == 200
-
-# -------------------------------
-# ADMIN COMMANDS
-# -------------------------------
-@bot.message_handler(commands=['add'])
-def add_user(message):
-    if message.from_user.id != ADMIN_ID:
-        return bot.reply_to(message, "⛔ У тебя нет прав администратора.")
-    try:
-        user_id = int(message.text.split()[1])
-    except:
-        return bot.reply_to(message, "❗ Используй: /add 123456789")
-    ALLOWED_USERS.add(user_id)
-    save_allowed()
-    bot.reply_to(message, f"✅ Пользователь {user_id} добавлен.")
-
-@bot.message_handler(commands=['remove'])
-def remove_user(message):
-    if message.from_user.id != ADMIN_ID:
-        return bot.reply_to(message, "⛔ У тебя нет прав администратора.")
-    try:
-        user_id = int(message.text.split()[1])
-    except:
-        return bot.reply_to(message, "❗ Используй: /remove 123456789")
-    if user_id == ADMIN_ID:
-        return bot.reply_to(message, "❗ Нельзя удалить администратора.")
-    if user_id in ALLOWED_USERS:
-        ALLOWED_USERS.remove(user_id)
-        save_allowed()
-        bot.reply_to(message, f"🗑 Пользователь {user_id} удалён.")
-    else:
-        bot.reply_to(message, f"⚠ ID нет в списке.")
-
-@bot.message_handler(commands=['list'])
-def list_users(message):
-    if message.from_user.id != ADMIN_ID:
-        return bot.reply_to(message, "⛔ У тебя нет прав администратора.")
-    result = "📋 Разрешённые пользователи:\n\n"
-    for uid in ALLOWED_USERS:
-        try:
-            chat = bot.get_chat(uid)
-            username = f"@{chat.username}" if chat.username else "(нет username)"
-            first_name = chat.first_name if chat.first_name else ""
-            last_name = chat.last_name if chat.last_name else ""
-        except:
-            username = "(не удалось получить username)"
-            first_name = ""
-            last_name = ""
-        result += f"{uid} — {username} {first_name} {last_name}\n"
-    bot.reply_to(message, result)
-
-# -------------------------------
-# TELEGRAM BOT HANDLERS
-# -------------------------------
-user_states = {}
-
-def send_welcome(user_id):
-    user_states[user_id] = {"step": "await_email"}
-    bot.send_message(user_id, "📧 Введи gmail")
-
-@bot.message_handler(commands=['start'])
-def start(message):
-    user_id = message.from_user.id
-
-    # Определяем баланс
-    balance = "Unlimited" if user_id in ALLOWED_USERS else "0"
-
-    # Отправляем Telegram ID и баланс
-    bot.send_message(
-        user_id,
-        f"Telegram ID: {user_id}\n💰Balance: {balance}"
+# ----------------------------
+# START
+# ----------------------------
+@dp.message(Command("start"))
+async def cmd_start(message: types.Message, state: FSMContext):
+    await state.clear()
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="✅ Да"), KeyboardButton(text="❌ Нет")]],
+        resize_keyboard=True
+    )
+    await message.answer(
+        f"🍀 Привет, {message.from_user.first_name}! Хочешь оставить заявку на вступление в клан?",
+        reply_markup=keyboard
     )
 
-    # Если пользователь разрешён, продолжаем workflow логина
-    if user_id in ALLOWED_USERS:
-        send_welcome(user_id)
-    else:
-        bot.send_message(user_id, "⛔ У тебя нет разрешения на использование бота.")
+# ----------------------------
+# АНКЕТА
+# ----------------------------
+@dp.message(F.text == "✅ Да")
+async def ask_age(message: types.Message, state: FSMContext):
+    await state.set_state(Form.age)
+    await message.answer("🔞 Сколько тебе лет?", reply_markup=types.ReplyKeyboardRemove())
 
-@bot.message_handler(func=lambda message: True)
-def handle_message(message):
-    user_id = message.from_user.id
-    text = message.text.strip()
-    chat_id = message.chat.id
+@dp.message(F.text == "❌ Нет")
+async def cancel(message: types.Message, state: FSMContext):
+    await state.clear()
+    await message.answer(
+        "😌 Хорошо. Возможно, твоя харизма ещё раскрывается. Успех любит время. ☘️",
+        reply_markup=types.ReplyKeyboardRemove()
+    )
 
-    # ---- ACCESS CHECK ----
-    if user_id not in ALLOWED_USERS:
-        bot.send_message(user_id, "⛔ У тебя нет разрешения на использование бота.")
-        return
+@dp.message(Form.age)
+async def ask_nickname(message: types.Message, state: FSMContext):
+    await state.update_data(age=message.text)
+    await state.set_state(Form.nickname)
+    await message.answer("🎮 Напиши свой игровой ник.")
 
-    if user_id not in user_states:
-        send_welcome(user_id)
-        return
+@dp.message(Form.nickname)
+async def ask_game_id(message: types.Message, state: FSMContext):
+    await state.update_data(nickname=message.text)
+    await state.set_state(Form.game_id)
+    await message.answer("💻✍🏻 Отправь свой ID из CPM.")
 
-    state = user_states[user_id]
+@dp.message(Form.game_id)
+async def ask_screenshot(message: types.Message, state: FSMContext):
+    await state.update_data(game_id=message.text)
+    await state.set_state(Form.screenshot)
+    await message.answer("📸 Отлично! Теперь отправь скриншот из своего профиля CPM 👇🏻")
 
-    if state["step"] == "await_email":
-        state["email"] = text
-        state["step"] = "await_password"
-        msg = bot.reply_to(message, "🔒 Введи пароль")
-        state["last_msg_ids"] = [message.message_id, msg.message_id]
+@dp.message(Form.screenshot, F.photo)
+async def finish(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    photo_id = message.photo[-1].file_id
+    await state.clear()
 
-    elif state["step"] == "await_password":
-        email = state["email"]
-        password = text
-        messages_to_delete = state.get("last_msg_ids", [])
-        messages_to_delete.append(message.message_id)
+    # Отправка сообщения пользователю, что заявка обрабатывается
+    await message.answer("📝 Твоя заявка обрабатывается, пожалуйста, подождите...")
 
-        msg_login = bot.reply_to(message, "🔐 Выполняю логин...")
-        messages_to_delete.append(msg_login.message_id)
+    # Отправка заявки администратору
+    now = datetime.now().strftime("%d.%m.%Y, %H:%M")
+    admin_text = (
+        "📥 Новая заявка в клан XARIZMA!\n\n"
+        f"👤 Имя: {message.from_user.full_name}\n"
+        f"🔗 Username: @{message.from_user.username}\n"
+        f"🆔 Telegram ID: {message.from_user.id}\n\n"
+        f"🔞 Возраст: {data['age']}\n"
+        f"🎮 Игровой ник: {data['nickname']}\n"
+        f"💻 Игровой ID: {data['game_id']}\n"
+        f"🕒 Время: {now}"
+    )
+    keyboard_admin = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Одобрить", callback_data=f"approve:{message.from_user.id}"),
+            InlineKeyboardButton(text="❌ Отклонить", callback_data=f"reject:{message.from_user.id}")
+        ]
+    ])
+    await bot.send_photo(ADMIN_ID, photo_id, caption=admin_text, reply_markup=keyboard_admin)
 
-        token = login(email, password)
-        if not token:
-            msg_error = bot.reply_to(message, "❌ Ошибка входа.")
-            messages_to_delete.append(msg_error.message_id)
-        else:
-            msg_rank = bot.reply_to(message, "👑 Rang устанавливается...")
-            messages_to_delete.append(msg_rank.message_id)
+@dp.message(Form.screenshot)
+async def no_photo(message: types.Message):
+    await message.answer("⚠️ Пожалуйста, отправь фото из профиля CPM.")
 
-            success = set_rank(token)
-            if success:
-                msg_done = bot.reply_to(message, "✅ RANG установлен!")
-            else:
-                msg_done = bot.reply_to(message, "❌ Ошибка при установке.")
-            messages_to_delete.append(msg_done.message_id)
+# ----------------------------
+# CALLBACK — Админ (Отклонить)
+# ----------------------------
+@dp.callback_query(F.data.startswith("reject:"))
+async def reject(callback: types.CallbackQuery):
+    user_id = int(callback.data.split(":")[1])
+    await callback.message.edit_reply_markup()
 
-        user_states.pop(user_id)
+    # Отправляем ссылку на группу ожидания
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Да", callback_data=f"join_wait:{user_id}"),
+            InlineKeyboardButton(text="❌ Нет", callback_data=f"no_join:{user_id}")
+        ]
+    ])
+    await bot.send_message(user_id,
+        "❌ Твоя заявка отклонена.\n"
+        "В клане сейчас нет свободных мест, но ты можешь присоединиться к группе ожидания 🕓\n"
+        "Хочешь, чтобы я отправил ссылку на группу?",
+        reply_markup=keyboard
+    )
 
-        def cleanup():
-            for msg_id in messages_to_delete:
-                try:
-                    bot.delete_message(chat_id, msg_id)
-                except:
-                    pass
-            send_welcome(user_id)
+@dp.callback_query(F.data.startswith("join_wait:"))
+async def join_wait(callback: types.CallbackQuery):
+    user_id = int(callback.data.split(":")[1])
+    await callback.message.edit_reply_markup()
 
-        threading.Timer(2.0, cleanup).start()
+    # Отправляем ссылку на группу ожидания
+    await bot.send_message(user_id, f"🕓 Отлично! Вот ссылка на группу ожидания:\n{WAIT_GROUP_LINK}")
 
-# -------------------------------
-# THREAD FOR TELEGRAM BOT (LONG POLLING)
-# -------------------------------
-def bot_thread():
-    bot.infinity_polling()
+    await callback.answer("✅ Ссылка на группу ожидания отправлена", show_alert=True)
 
-# -------------------------------
-# RENDER APP START
-# -------------------------------
+# ----------------------------
+# Запуск бота через polling
+# ----------------------------
+async def start_polling():
+    print("Бот запущен с использованием Polling")
+    await dp.start_polling(bot)
+
 if __name__ == "__main__":
-    print("🚀 Telegram bot starting...")
-
-    t = threading.Thread(target=bot_thread)
-    t.start()
-
-    app = Flask(__name__)
-
-    @app.route("/")
-    def home():
-        return "Bot is running"
-
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    asyncio.run(start_polling())
