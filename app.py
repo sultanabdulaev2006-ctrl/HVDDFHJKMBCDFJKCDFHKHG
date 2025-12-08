@@ -152,12 +152,12 @@ def start(message):
     user_id = message.from_user.id
 
     # Определяем баланс
-    balance = "Unlimited" if user_id in ALLOWED_USERS else "0"
+    balance = "♾️ Unlimited" if user_id in ALLOWED_USERS else "0"
 
     # Отправляем Telegram ID и баланс
     bot.send_message(
         user_id,
-        f"Telegram ID: {user_id}\n💰Balance: {balance}"
+        f"Telegram 🆔️: {user_id}\n💰Balance: {balance}"
     )
 
     # Если пользователь разрешён, продолжаем workflow логина
